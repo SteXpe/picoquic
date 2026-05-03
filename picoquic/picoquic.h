@@ -399,6 +399,39 @@ typedef struct st_picoquic_tp_t {
     int is_reset_stream_at_enabled; /* 1: enabled. 0: not there. (default) */
 } picoquic_tp_t;
 
+/* NEW IH */
+/* Add a code corresponding to X25519 crypto group */
+#define PICOQUIC_GROUP_X25519 29
+
+/* Return value indicating that an sh has been received,
+ * and this cnx will be deleted and no longer be processed.
+ */
+#define IH_STOP_AFTER_SERVER_HELLO (-0x48415256)
+
+/* Prototype: Callback function called on server hello reception */
+typedef int (*picoquic_on_server_hello_cb_fn)(
+    picoquic_cnx_t* cnx,              // picoquic_cnx associated to the sh
+    const uint8_t server_random[32],  // Random value to extract from the sh
+    void* callback_ctx);              // ih_cnx containing 'cnx'
+
+/* Prototype: Setter of a callback function on server hello reception */
+void picoquic_set_on_server_hello_cb(
+    picoquic_cnx_t* cnx,                // Set callback on picoquic cnx
+    picoquic_on_server_hello_cb_fn cb,  // Callback to set
+    void* callback_ctx);                // ih_cnx containing 'cnx'
+
+/* Prototype: Callback function called on UDP datagram reception */
+typedef void (*picoquic_on_udp_datagram_received_cb_fn)(
+    size_t udp_payload_length,  // UDP payload of the datagram received
+    void* callback_ctx);        // ih_ctx
+
+/* Prototype: Setter of a callback function on UDP datagram reception */
+void picoquic_set_on_udp_datagram_received_cb(
+    picoquic_quic_t* quic,                      // Set callback on quic ctx
+    picoquic_on_udp_datagram_received_cb_fn cb, // Callback to set
+    void* callback_ctx);                        // ih_ctx containing 'quic'
+/* END NEW IH */
+
 /*
  * Stream types
  */

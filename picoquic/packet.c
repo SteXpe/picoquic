@@ -901,6 +901,73 @@ int picoquic_parse_header_and_decrypt(
     return ret;
 }
 
+/* NEW PC */
+/* Implementation: Parse a received QUIC packet header, and return the decrypted payload bytes.
+ * Alternative to picoquic_incoming_packet(), letting the application handle the payload itself.
+ */
+int picoquic_parse_header_and_decrypt_to_payload(
+    picoquic_quic_t* quic,
+    const uint8_t* bytes,
+    size_t length,
+    size_t packet_length,
+    const struct sockaddr* addr_from,
+    uint64_t current_time,
+    uint8_t* payload_bytes,
+    size_t payload_bytes_max,
+    size_t* payload_length,
+    picoquic_packet_header* ph,
+    picoquic_cnx_t** pcnx,
+    size_t* consumed,
+    int* new_context_created)
+{
+    if (payload_bytes == NULL || payload_length == NULL || ph == NULL || pcnx == NULL ||
+        consumed == NULL || new_context_created == NULL || quic == NULL || bytes == NULL)
+        return -1;
+
+    picoquic_stream_data_node_t tmp;
+    int ret;
+
+    memset(&tmp, 0, sizeof(tmp));  // Initialize to 0
+
+    /* Use the picoquic function to parse the header and decrypt the payload */
+    ret = picoquic_parse_header_and_decrypt(
+        quic,
+        bytes,
+        length,
+        packet_length,
+        addr_from,
+        current_time,
+        &tmp,
+        ph,
+        pcnx,
+        consumed,
+        new_context_created);
+
+    if (ret != 0) {
+        *payload_length = 0;
+        return ret;
+    }
+
+    /* Filter out packets that are irrelevant to the harvest: No 1-RTT with PC frames */
+    if (ph->ptype == picoquic_packet_version_negotiation ||
+        ph->ptype == picoquic_packet_retry ||
+        ph->ptype == picoquic_packet_error) {
+        *payload_length = 0;
+        return 0;
+    }
+
+    /* The decrypted payload is copied in payload_bytes */
+    if (ph->offset + ph->payload_length > sizeof(tmp.data) || ph->payload_length > payload_bytes_max) {
+        *payload_length = 0;
+        return -1;
+    }
+    memcpy(payload_bytes, tmp.data + ph->offset, ph->payload_length);
+    *payload_length = ph->payload_length;
+
+    return 0;
+}
+/* END NEW PC */
+
 /*
  * Processing of a version renegotiation packet.
  *

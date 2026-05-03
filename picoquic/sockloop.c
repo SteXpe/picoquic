@@ -1118,6 +1118,32 @@ static int monitor_system_call_duration(packet_loop_system_call_duration_t* sc_d
     return shall_notify;
 }
 
+/* NEW IH */
+/* Implementation: Callback function called on UDP datagram reception */
+static void picoquic_notify_udp_datagram_received(
+    picoquic_quic_t* quic,
+    size_t udp_payload_length)
+{
+    if (quic != NULL && quic->on_udp_datagram_received_cb != NULL) {
+        quic->on_udp_datagram_received_cb(
+            udp_payload_length,
+            quic->on_udp_datagram_received_cb_ctx);
+    }
+}
+
+/* Implementation: Setter of on_udp_datagram_received_cb_fn */
+void picoquic_set_on_udp_datagram_received_cb(
+    picoquic_quic_t* quic,
+    picoquic_on_udp_datagram_received_cb_fn cb,
+    void* callback_ctx)
+{
+    if (quic != NULL) {
+        quic->on_udp_datagram_received_cb = cb;
+        quic->on_udp_datagram_received_cb_ctx = callback_ctx;
+    }
+}
+/* END NEW IH */
+
 #ifdef _WINDOWS
     DWORD WINAPI picoquic_packet_loop_v3(LPVOID v_ctx)
 #else
@@ -1329,23 +1355,87 @@ void* picoquic_packet_loop_v3(void* v_ctx)
                         recv_length > s_ctx[socket_rank].udp_coalesced_size) {
                         recv_length = s_ctx[socket_rank].udp_coalesced_size;
                     }
+
+                    /* NEW IH */
+                    /* Trigger the UDP datagram reception callback */
+                    picoquic_notify_udp_datagram_received(quic, recv_length);
+                    /* END NEW IH */
+
                     /* Submit the packet to the client */
                     ret = picoquic_incoming_packet_ex(quic, s_ctx[socket_rank].recv_buffer + recv_bytes,
                         recv_length, (struct sockaddr*)&addr_from,
                         (struct sockaddr*)&addr_to,
                         s_ctx[socket_rank].dest_if,
                         s_ctx[socket_rank].received_ecn, &last_cnx, current_time);
+
+                    /* NEW IH */
+                    /* If the sh has been processed, this cnx processing have to be stopped */
+                    if (ret == IH_STOP_AFTER_SERVER_HELLO) {
+                        ret = 0; // Avoid to raise an error
+
+                        /* The custom loop_callback, ih_loop_cb, is called to delete the cnx
+                         * before sending another packet.
+                         */
+                        if (loop_callback != NULL) {
+                            int cb_ret = loop_callback(
+                                quic,
+                                picoquic_packet_loop_after_receive,
+                                loop_callback_ctx,
+                                NULL);
+
+                            if (cb_ret != 0) {
+                                ret = cb_ret;
+                                break;
+                            }
+                        }
+                    }
+
+                    /* TO DO: equivalent to "continue;" in Linux block, is not implemented */
+                    /* END NEW IH */
+
                     recv_bytes += recv_length;
                 }
+
                 if (ret == 0) {
                     ret = picoquic_win_recvmsg_async_start(&s_ctx[socket_rank]);
                 }
 #else
+                /* NEW IH */
+                /* Trigger the UDP datagram reception callback */
+                picoquic_notify_udp_datagram_received(quic, (size_t)bytes_recv);
+                /* END NEW IH */
+
                 /* Submit the packet to the server */
                 ret = picoquic_incoming_packet_ex(quic, received_buffer,
                     (size_t)bytes_recv, (struct sockaddr*)&addr_from,
                     (struct sockaddr*)&addr_to, if_index_to, received_ecn,
                     &last_cnx, current_time);
+
+                /* NEW IH */
+                /* If the sh has been processed, this cnx processing have to be stopped */
+                if (ret == IH_STOP_AFTER_SERVER_HELLO) {
+                    ret = 0; // Avoid to raise an error
+
+                    /* The custom loop_callback, ih_loop_cb, is called to delete the cnx
+                     * before sending another packet.
+                     */
+                    if (loop_callback != NULL) {
+                        int cb_ret = loop_callback(
+                            quic,
+                            picoquic_packet_loop_after_receive,
+                            loop_callback_ctx,
+                            NULL);
+
+                        if (cb_ret != 0) {
+                            ret = cb_ret;
+                            break;
+                        }
+                    }
+
+                    /* The sending step (e.g. ACK) is skipped for this iteration */
+                    continue;
+                }
+                /* END NEW IH */
 #endif
                 if (loop_callback != NULL) {
                     size_t b_recvd = (size_t)bytes_recv;
