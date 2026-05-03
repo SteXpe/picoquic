@@ -52,13 +52,20 @@
  *   packet and expose its decrypted payload;
  *
  * Assumptions about the OS running this client:
- *   PCH_UDP_BUFFER_SIZE is used to set the receiving and sending UDP buffer size
- *   for each port. However the system set limits to these values, and you may want
- *   to increases them. On Linux these maximum values can be changed in CLI with:
- *     sysctl net.core.rmem_max net.core.wmem_max
- *   Then changed with:
+ *   PCH_UDP_BUFFER_SIZE is used to set the UDP receive and send buffer sizes
+ *   for each port. However, the OS imposes limits to these values, and you may
+ *   want to increases them.
+ *
+ *   On Linux, the current maximum values can be checked from the CLI with:
+ *      sysctl net.core.rmem_max net.core.wmem_max
+ *
+ *   They can then be changed with:
  *     sudo sysctl -w net.core.rmem_max=$((16*1024*1024))
  *     sudo sysctl -w net.core.wmem_max=$((16*1024*1024))
+ *
+ * For better performances do not forget to compile with the Release flag:
+ *      cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DPICOQUIC_FETCH_PTLS=Y
+ *      make -j"$(nproc)"
  *
  * Use of AI:
  *   ChatGPT was used throughout the development of this program to enhance
