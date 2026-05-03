@@ -68,9 +68,14 @@
  *      make -j"$(nproc)"
  *
  * Use of AI:
- *   ChatGPT was used throughout the development of this program to enhance
- *   understanding, create an initial framework, speeds up debugging, review the
- *   code, and improve defensive programming features.
+ *   ChatGPT was used throughout the development of this program to support
+ *   understanding, help create an initial framework, speed up debugging, review
+ *   the code, and improve defensive programming practices. In other words, AI was
+ *   used as a powerful supporting tool throughout the development process.
+ *   However, it was not used to replace the author’s own work or expertise. The
+ *   author remained responsible for the technical choices, the understanding of
+ *   the implemented mechanisms, the validation of the results, and the
+ *   interpretation presented in this thesis.
  *
  * Abbreviations:
  *   - PCH: Path Challenge Harvester
