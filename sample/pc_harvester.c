@@ -51,10 +51,19 @@
  *   picoquic_parse_header_and_decrypt(...) is available to parse a received QUIC
  *   packet and expose its decrypted payload;
  *
+ * Assumptions about the OS running this client:
+ *   PCH_UDP_BUFFER_SIZE is used to set the receiving and sending UDP buffer size
+ *   for each port. However the system set limits to these values, and you may want
+ *   to increases them. On Linux these maximum values can be changed in CLI with:
+ *     sysctl net.core.rmem_max net.core.wmem_max
+ *   Then changed with:
+ *     sudo sysctl -w net.core.rmem_max=$((16*1024*1024))
+ *     sudo sysctl -w net.core.wmem_max=$((16*1024*1024))
+ *
  * Use of AI:
  *   ChatGPT was used throughout the development of this program to enhance
- *   understanding, create an initial framework, speeds up debugging, review the code, and improve
- *   defensive programming features.
+ *   understanding, create an initial framework, speeds up debugging, review the
+ *   code, and improve defensive programming features.
  *
  * Abbreviations:
  *   - PCH: Path Challenge Harvester
