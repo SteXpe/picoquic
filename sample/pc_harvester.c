@@ -127,7 +127,7 @@
 #define PCH_OUTPUT_FILE       "path_challenges.txt"  // Output file to save harvested PATH_CHALLENGE values
 #define PCH_OUTPUT_BUFFER     ((size_t)(1024*1024))  // Size of the buffer used to save random numbers
 #define PCH_BURST_SIZE        ((uint32_t)1)          // Default max number of probes sent at each loop
-#define PCH_TARGET_PC         UINT64_C(1000000)      // Default number of PATH_CHALLENGE values to harvest, 0=infinite
+#define PCH_TARGET_PC         UINT64_C(0)            // Default number of PATH_CHALLENGE values to harvest, 0=infinite
 #define PCH_PING_PERIOD_US    UINT64_C(2000)         // Default period between PING frames on the main path, in us
 #define PCH_MAIN_PORT         ((uint16_t)50000)      // Local UDP port for the validated main path
 #define PCH_FIRST_PORT_MP     ((uint16_t)50001)      // First local UDP port of the migration pool
