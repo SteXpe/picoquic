@@ -97,11 +97,11 @@
 #define IH_ALPN               "h3"                    // HTTP/3 as Application Protocol
 #define IH_SNI                "localhost"             // DNS Server name used for TLS SNI
 #define IH_OUTPUT_FILE        "randoms.txt"           // Output file to save harvested random values
-#define IH_MAX_INFLIGHT       ((size_t)64)            // Default max number of active cnx
+#define IH_MAX_INFLIGHT       ((size_t)32)            // Default max number of active cnx
 #define IH_TARGET_SH          ((size_t)0)             // Default number of ServerHello to harvest, 0=infinite
 #define IH_OUTPUT_BUFFER      ((size_t)16*1024*1024)  // Size of the buffer used to save random numbers
 #define IH_REFILL_BURST       ((size_t)32)            // Max number of new cnx at each loop
-#define IH_TIMEOUT_US         UINT64_C(1000000)       // Default max lifetime of a cnx in us
+#define IH_TIMEOUT_US         UINT64_C(100000)       // Default max lifetime of a cnx in us
 #define IH_STATS_PERIOD_US    UINT64_C(1000000)       // Period between stats report in us
 #define IH_TIMEOUT_PERIOD_US  UINT64_C(10000)         // Default verification period of cnx timeout in us
 #define IH_SCID_HARVEST       1                       // SCIDs are also extracted (0=True, 1=False)
