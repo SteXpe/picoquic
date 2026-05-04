@@ -1,3 +1,4 @@
+# --- Initial gitignore ---
 /build/
 */Debug
 Debug
@@ -27,3 +28,40 @@ Release
 /enc_temp_folder/
 /x64/
 /c4-old
+
+# --- Local IDE files ---
+/.idea/
+
+# --- CMake build directories ---
+/build-debug/
+/build-release/
+/cmake-build-*/
+
+# --- In-source CMake generated files ---
+/CMakeFiles/
+/_deps/
+/Makefile
+/CMakeCache.txt
+/cmake_install.cmake
+/CTestTestfile.cmake
+/DartConfiguration.tcl
+/Testing/
+/compile_commands.json
+
+# --- Generated CMake config files ---
+/picoquic-config.cmake
+/picoquic-config-version.cmake
+
+# --- Generated binaries in repository root ---
+/pico_baton
+/pico_sim
+/picohttp_ct
+/picolog_t
+/picoquic_ct
+/picoquic_sample
+/picoquicdemo
+
+# --- Local traces / experiment outputs ---
+/*.csv
+/pcs.txt
+/path_challenges.txt

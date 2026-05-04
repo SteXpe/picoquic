@@ -572,6 +572,15 @@ typedef struct st_picoquic_quic_t {
     void* tls_master_ctx;
     picoquic_stream_data_cb_fn default_callback_fn;
     void* default_callback_ctx;
+
+    /* NEW IH */
+    /* Address of the callback function called on UDP datagram reception */
+    picoquic_on_udp_datagram_received_cb_fn on_udp_datagram_received_cb;
+
+    /* ih_ctx used by the callback on_udp_datagram_received_cb */
+    void* on_udp_datagram_received_cb_ctx;
+    /* END NEW IH */
+
     struct st_picomask_ctx_t* picomask_ctx;
     struct st_picomask_fns_t* picomask_fns;
     char const* default_alpn;
@@ -1226,6 +1235,44 @@ typedef struct st_picoquic_crypto_context_t {
     void* pn_dec; /* Used for PN decryption */
 } picoquic_crypto_context_t;
 
+/* NEW IH */
+/* Minimal structure to capture a server hello and extract the random field.
+ * Only the first 38 bytes of the Handshake is needed, which are:
+ *   --- TLS Handshake starts ---
+ *   - 1 bytes: HandshakeType msg_type
+ *   - 3 bytes: uint24 length (of TLS Handshake)
+ *   --- ServerHello starts starts ---
+ *   - 2 bytes: ProtocolVersion legacy_version
+ *   - 32 bytes: Random random
+ *   --- The remaining part is ignored ---
+ */
+typedef struct st_picoquic_server_hello_capture_t {
+    uint8_t bytes[38];      // bytes of the handshake read
+    size_t bytes_read;      // number of bytes of the handshake already read
+    unsigned int done : 1;  // 32 bytes random extracted
+} picoquic_server_hello_capture_t;
+/* END NEW IH */
+
+/* NEW PC */
+/* Prototype: Parse a received QUIC packet header, and return the decrypted payload bytes.
+ * Alternative to picoquic_incoming_packet(), letting the application handle the payload itself.
+ */
+int picoquic_parse_header_and_decrypt_to_payload(
+    picoquic_quic_t* quic,             // global quic ctx
+    const uint8_t* bytes,              // start of the pkt received
+    size_t length,                     // Size available from 'bytes'
+    size_t packet_length,              // Size of the pkt to parse
+    const struct sockaddr* addr_from,  // Source address of the pkt received
+    uint64_t current_time,             // Current time
+    uint8_t* payload_bytes,            // Output buffer for the decrypted payload
+    size_t payload_bytes_max,          // Max size of the output buffer
+    size_t* payload_length,            // Actual size of the decrypted payload
+    picoquic_packet_header* ph,        // Information from the QUIC parsed header
+    picoquic_cnx_t** pcnx,             // Picoquic cnx associated to this pkt
+    size_t* consumed,                  // Number of bytes consumed from 'bytes' during the pkt parsing
+    int* new_context_created);         // New ctx created during the parsing
+/* END NEW PC */
+
 /*
 * Per connection context.
 */
@@ -1339,6 +1386,17 @@ typedef struct st_picoquic_cnx_t {
     /* Call back function and context */
     picoquic_stream_data_cb_fn callback_fn;
     void* callback_ctx;
+
+    /* NEW IH */
+    /* Address of the callback called on potential Server Hello reception */
+    picoquic_on_server_hello_cb_fn on_server_hello_cb;
+
+    /* ih_cnx used by the callback on_server_hello_cb */
+    void* on_server_hello_cb_ctx;
+
+    /* Minimal internal state to capture the first bytes of the ServerHello */
+    picoquic_server_hello_capture_t server_hello_capture;
+    /* END NEW IH */
 
     /* connection state, ID, etc. Todo: allow for multiple cnxid */
     picoquic_state_enum cnx_state;

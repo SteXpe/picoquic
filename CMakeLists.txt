@@ -528,6 +528,14 @@ if (BUILD_LOGREADER)
     set_picoquic_compile_settings(picolog_t)
 endif()
 
+add_executable(initial_harvester sample/initial_harvester.c)
+target_link_libraries(initial_harvester PRIVATE picoquic-core)
+target_include_directories(initial_harvester PRIVATE picoquic)
+set_picoquic_compile_settings(initial_harvester)
+
+add_executable(pc_harvester sample/pc_harvester.c)
+target_link_libraries(pc_harvester picoquic-core)
+
 include(CTest)
 
 if(BUILD_TESTING AND picoquic_BUILD_TESTS)

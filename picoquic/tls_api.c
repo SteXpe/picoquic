@@ -96,6 +96,12 @@ struct st_picoquic_cipher_suites_t picoquic_cipher_suites[PICOQUIC_CIPHER_SUITES
 
 ptls_key_exchange_algorithm_t* picoquic_key_exchanges[PICOQUIC_KEY_EXCHANGES_NB_MAX + 1] = { 0 };
 ptls_key_exchange_algorithm_t* picoquic_key_exchange_secp256r1[2] = { 0 };
+
+/* NEW IH */
+/* Pointer to a X25519 key exchange algorithm */
+ptls_key_exchange_algorithm_t* picoquic_key_exchange_x25519[2] = { NULL, NULL };
+/* END NEW IH */
+
 ptls_hpke_cipher_suite_t* picoquic_hpke_cipher_suites[PICOQUIC_HPKE_CIPHER_SUITE_NB_MAX + 1] = { 0 };
 ptls_hpke_kem_t* picoquic_hpke_kems[PICOQUIC_HPKE_KEM_NB_MAX + 1] = { 0 };
 picoquic_set_private_key_from_file_t picoquic_set_private_key_from_file_fn = NULL;
@@ -289,6 +295,13 @@ void picoquic_register_key_exchange_algorithm(ptls_key_exchange_algorithm_t* key
         /* Replace the lower priority provider if present! */
         picoquic_key_exchange_secp256r1[0] = key_exchange;
     }
+
+    /* NEW IH */
+    /* Save the pointer to the X25519 key exchange algorithm */
+    if (key_exchange->id == PICOQUIC_GROUP_X25519) {
+        picoquic_key_exchange_x25519[0] = key_exchange;
+    }
+    /* END NEW IH */
 }
 
 /* registration of HPKE cipher suites */
@@ -544,6 +557,7 @@ size_t picoquic_hash_get_length(char const* algorithm_name) {
 * Supported algorithms are defined by keyexchange_id
 * - 0: set all supported algorithms
 * - PICOQUIC_GROUP_SECP256R1: secp256r1
+* - PICOQUIC_GROUP_X25519: x25519 (NEW IH)
 */
 
 static int picoquic_set_key_exchange_in_ctx(ptls_context_t* ctx, int key_exchange_id)
@@ -562,6 +576,19 @@ static int picoquic_set_key_exchange_in_ctx(ptls_context_t* ctx, int key_exchang
             ctx->key_exchanges = picoquic_key_exchange_secp256r1;
         }
         break;
+
+    /* NEW IH*/
+    /* TLS is set to use the group X25519 */
+    case PICOQUIC_GROUP_X25519:
+        if (picoquic_key_exchange_x25519[0] == NULL) {
+            ret = -1;
+        }
+        else {
+            ctx->key_exchanges = picoquic_key_exchange_x25519;
+        }
+        break;
+    /* END NEW IH*/
+
     default:
         ret = -1;
         break;
@@ -2540,6 +2567,93 @@ static void picoquic_setup_cleartext_aead_salt(size_t version_index, ptls_iovec_
     }
 }
 
+/* NEW IH */
+/* Implementation: Setter of a callback function on UDP datagram reception */
+void picoquic_set_on_server_hello_cb(
+    picoquic_cnx_t* cnx,
+    picoquic_on_server_hello_cb_fn cb,
+    void* callback_ctx)
+{
+    if (cnx != NULL) {
+        cnx->on_server_hello_cb = cb;
+        cnx->on_server_hello_cb_ctx = callback_ctx;
+        cnx->server_hello_capture.bytes_read = 0;
+        cnx->server_hello_capture.done = 0;
+    }
+}
+
+/* A HelloRetryRequest (HRR) encoded as a special ServerHello have a fixed random value
+ * fixed by RFC 8446. Compare this value with the random_bytes extracted.
+ */
+static int picoquic_is_tls_hello_retry_random(const uint8_t random_bytes[32])
+{
+    static const uint8_t hrr_random[32] = {
+        0xCF, 0x21, 0xAD, 0x74, 0xE5, 0x9A, 0x61, 0x11,
+        0xBE, 0x1D, 0x8C, 0x02, 0x1E, 0x65, 0xB8, 0x91,
+        0xC2, 0xA2, 0x11, 0x16, 0x7A, 0xBB, 0x8C, 0x5E,
+        0x07, 0x9E, 0x09, 0xE2, 0xC8, 0xA8, 0x33, 0x9C
+    };
+    return (memcmp(random_bytes, hrr_random, 32) == 0);
+}
+
+/* Try to extract serverHello.random value from the first 38 bytes TLS handshake
+ * Handle also the case where the 38 bytes are available all at once
+ */
+static int picoquic_try_server_hello_capture(
+    picoquic_cnx_t* cnx,
+    size_t epoch,
+    const uint8_t* bytes,
+    size_t length)
+{
+    if (cnx == NULL || bytes == NULL || length == 0) return 0;
+    if (cnx->on_server_hello_cb == NULL) return 0;  // Only if callback registered
+    if (!cnx->client_mode) return 0;                // Only on client mode
+    if (cnx->server_hello_capture.done) return 0;   // Only one capture per cnx
+    if (epoch != 0) return 0;                       // Only the Initial Epoch
+
+    /* 38 bytes already captured */
+    if (cnx->server_hello_capture.bytes_read >= sizeof(cnx->server_hello_capture.bytes)) {
+        cnx->server_hello_capture.done = 1;
+        return 0;
+    }
+
+    size_t available;
+    size_t copied;
+    const uint8_t* random32;
+
+    /* Extract the available bytes among the first 38 bytes of the TLS handshake */
+    available = sizeof(cnx->server_hello_capture.bytes) - cnx->server_hello_capture.bytes_read;
+    copied = (length < available) ? length : available;
+    memcpy(cnx->server_hello_capture.bytes + cnx->server_hello_capture.bytes_read, bytes, copied);
+    cnx->server_hello_capture.bytes_read += copied;
+
+    /* Wait until 38 bytes are extracted */
+    if (cnx->server_hello_capture.bytes_read < sizeof(cnx->server_hello_capture.bytes)) return 0;
+    cnx->server_hello_capture.done = 1;
+
+    /* Check the HandshakeType: 2 for a server hello */
+    if (cnx->server_hello_capture.bytes[0] != 0x02) return 0;
+
+    /* Extract the random value */
+    random32 = cnx->server_hello_capture.bytes + 6;
+
+    /* In case of an HelloRetryRequest, the random value is ignored */
+    if (picoquic_is_tls_hello_retry_random(random32)) return 0;
+
+    /* Random number extracted -> Callback on_server_hello_cb to stop processing this cnx,
+     * go back to the initial_harvester code, and delete the cnx quickly.
+     */
+    if (cnx->on_server_hello_cb != NULL) {
+        int cb_ret = cnx->on_server_hello_cb(
+            cnx,
+            random32,
+            cnx->on_server_hello_cb_ctx);
+        if (cb_ret != 0) return cb_ret;
+    }
+    return 0;
+}
+/* END NEW IH */
+
 /* Input stream zero data to TLS context.
  *
  * Processing  depends on the "epoch" in which packets have been received. That
@@ -2599,6 +2713,17 @@ int picoquic_tls_stream_process(picoquic_cnx_t* cnx, int * data_consumed, uint64
              * This allows detection of errors during processing. */
             picoquic_clear_crypto_errors();
 
+            /* NEW IH */
+            /* Try to extract sh.random from incoming TLS bytes before consumption by picotls */
+            ret = picoquic_try_server_hello_capture(cnx, epoch, data->bytes + start, epoch_data);
+
+            /* If ret=IH_STOP_AFTER_SERVER_HELLO, sendbuf is freed then while loop is exited */
+            if (ret == IH_STOP_AFTER_SERVER_HELLO) {
+                ptls_buffer_dispose(&sendbuf);
+                break;
+            }
+            /* END NEW IH */
+
             ret = ptls_handle_message(ctx->tls, &sendbuf, send_offset, epoch,
                 data->bytes + start, epoch_data, &ctx->handshake_properties);
 
@@ -2655,7 +2780,12 @@ int picoquic_tls_stream_process(picoquic_cnx_t* cnx, int * data_consumed, uint64
             ptls_buffer_dispose(&sendbuf);
         }
 
+        /* NEW IH */
+        /* If ret=IH_STOP_AFTER_SERVER_HELLO, this block is skipped to avoid unnecessary processing */
+        if (processed > 0 && ret != IH_STOP_AFTER_SERVER_HELLO) {
+        /* OLD
         if (processed > 0) {
+        END NEW IH */
             if (ret == 0) {
                 switch (cnx->cnx_state) {
                 case picoquic_state_client_retry_received:
